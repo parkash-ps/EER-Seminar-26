@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Research Constellation — Engineering Education Seminar</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050a18;
+    --gold: #c9a84c;
+    --gold-light: #f0d080;
+    --silver: #a8b8d0;
+    --cream: #e8e0d0;
+    --teal: #4ab8c8;
+    --rose: #d06080;
+    --violet: #8870d0;
+    --green: #60c090;
+    --orange: #d08060;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--cream);
+    font-family: 'Crimson Pro', Georgia, serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  #starfield {
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 0;
+  }
+
+  header {
+    position: relative; z-index: 10;
+    text-align: center;
+    padding: 44px 24px 14px;
+    border-bottom: 1px solid rgba(201,168,76,0.2);
+  }
+  header h1 {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: clamp(1.1rem, 2.8vw, 1.9rem);
+    color: var(--gold-light);
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 40px rgba(240,208,128,0.4);
+    margin-bottom: 6px;
+  }
+  header p {
+    font-size: 0.95rem; color: var(--silver);
+    font-style: italic; letter-spacing: 0.04em;
+  }
+
+  .legend {
+    position: relative; z-index: 10;
+    display: flex; flex-wrap: wrap;
+    justify-content: center; gap: 14px;
+    padding: 14px 24px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.76rem; color: var(--silver);
+    letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .legend-dot {
+    width: 11px; height: 11px; border-radius: 50%;
+    flex-shrink: 0; box-shadow: 0 0 7px currentColor;
+  }
+
+  /* ── Map container ── */
+  #map-wrap {
+    position: relative; z-index: 5;
+    width: 100%; max-width: 1400px;
+    margin: 0 auto;
+    height: 1080px;   /* generous vertical room */
+  }
+
+  /* SVG layer — circles and edges only */
+  #cmap {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    overflow: visible;
+  }
+
+  /* ── HTML edge-label divs ── */
+  .elabel {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: rgba(5,10,24,0.92);
+    border: 1px solid rgba(168,184,208,0.18);
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-family: 'Crimson Pro', serif;
+    font-style: italic;
+    font-size: 0.65rem;
+    color: rgba(168,184,208,0.9);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 20;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Tooltip ── */
+  #tooltip {
+    position: fixed; z-index: 1000;
+    max-width: 320px;
+    background: rgba(8,15,36,0.97);
+    border: 1px solid var(--gold);
+    border-radius: 8px;
+    padding: 16px 18px;
+    pointer-events: none; opacity: 0;
+    transition: opacity 0.18s;
+    box-shadow: 0 0 30px rgba(201,168,76,0.25);
+  }
+  #tooltip.visible { opacity: 1; }
+  #tooltip h3 {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 0.82rem; color: var(--gold-light);
+    margin-bottom: 5px; line-height: 1.4;
+  }
+  #tooltip .spk {
+    font-size: 0.75rem; color: var(--teal);
+    margin-bottom: 8px; font-style: italic;
+  }
+  #tooltip p {
+    font-size: 0.82rem; color: var(--cream); line-height: 1.55;
+  }
+  #tooltip .conn {
+    margin-top: 9px; font-size: 0.75rem; color: var(--silver);
+    border-top: 1px solid rgba(201,168,76,0.18); padding-top: 8px;
+  }
+  #tooltip .conn span { color: var(--gold); }
+
+  /* Pulse rings */
+  @keyframes pulse-ring {
+    0%   { r: 42; opacity: 0.55; }
+    100% { r: 88; opacity: 0; }
+  }
+  .pulse-ring {
+    fill: none; stroke: var(--gold); stroke-width: 1;
+    animation: pulse-ring 3.2s ease-out infinite;
+  }
+
+  /* node hover brightens */
+  .node-g { cursor: pointer; }
+  .node-g:hover circle.nc { filter: brightness(1.45); }
+
+  footer {
+    position: relative; z-index: 10;
+    text-align: center; padding: 20px;
+    font-size: 0.75rem; color: rgba(168,184,208,0.45);
+    border-top: 1px solid rgba(255,255,255,0.05);
+    font-style: italic;
+  }
+  footer strong { color: var(--gold); }
+</style>
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+
+<header>
+  <h1>Research Constellation</h1>
+  <p>Engineering Education Seminar &middot; Spring 2026 &middot; ENGREDU 7881</p>
+</header>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#c9a84c;color:#c9a84c"></div>Core Field</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4ab8c8;color:#4ab8c8"></div>Professional Identity &amp; Career</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#d06080;color:#d06080"></div>Sociotechnical &amp; Ethics</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8870d0;color:#8870d0"></div>AI &amp; Emerging Technology</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#60c090;color:#60c090"></div>Student Learning &amp; Motivation</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#d08060;color:#d08060"></div>Global &amp; Equity Contexts</div>
+</div>
+
+<div id="map-wrap">
+  <svg id="cmap" xmlns="http://www.w3.org/2000/svg">
+
+    <defs>
+      <!-- Radial gradients — beautiful fills matching uploaded design -->
+      <radialGradient id="gCenter" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#f0d080"/>
+        <stop offset="55%"  stop-color="#c9a84c"/>
+        <stop offset="100%" stop-color="#6a4c18"/>
+      </radialGradient>
+      <radialGradient id="gTeal" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#7adce8"/>
+        <stop offset="100%" stop-color="#1e7888"/>
+      </radialGradient>
+      <radialGradient id="gRose" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#e888a8"/>
+        <stop offset="100%" stop-color="#7a2848"/>
+      </radialGradient>
+      <radialGradient id="gViolet" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#b0a0f0"/>
+        <stop offset="100%" stop-color="#483880"/>
+      </radialGradient>
+      <radialGradient id="gGreen" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#88ddb8"/>
+        <stop offset="100%" stop-color="#207850"/>
+      </radialGradient>
+      <radialGradient id="gOrange" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#e8b080"/>
+        <stop offset="100%" stop-color="#784828"/>
+      </radialGradient>
+
+      <!-- Glow filters -->
+      <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="glow-strong" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="10" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+
+      <!-- Arrowhead markers — one per cluster color -->
+      <marker id="arr-gold"   markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="rgba(201,168,76,0.6)"/></marker>
+      <marker id="arr-teal"   markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="rgba(74,184,200,0.65)"/></marker>
+      <marker id="arr-rose"   markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="rgba(208,96,128,0.65)"/></marker>
+      <marker id="arr-violet" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="rgba(136,112,208,0.65)"/></marker>
+      <marker id="arr-green"  markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="rgba(96,192,144,0.65)"/></marker>
+      <marker id="arr-orange" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="rgba(208,128,96,0.65)"/></marker>
+      <marker id="arr-inter"  markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="rgba(180,200,220,0.7)"/></marker>
+    </defs>
+
+    <!-- Edges and nodes are drawn by JS below -->
+  </svg>
+</div>
+
+<div id="tooltip">
+  <h3 id="tt-title"></h3>
+  <div class="spk" id="tt-spk"></div>
+  <p id="tt-desc"></p>
+  <div class="conn" id="tt-conn"></div>
+</div>
+
+<footer>
+  Hover any node to explore its concept &middot; ENGREDU 7881 Spring 2026 &middot; <strong>Research Constellation</strong>
+</footer>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────
+// NODE DATA
+// px / py = pixel positions within the 1400 × 1080 SVG viewport
+// r = radius  |  hub nodes bigger  |  center biggest
+// ─────────────────────────────────────────────────────────────────────
+const NODES = [
+  // CENTER
+  { id:'eer',
+    lines:['Engineering','Education','Research (EER)'],
+    grad:'gCenter', stroke:'#c9a84c', r:50, center:true,
+    px:700, py:520,
+    spk:'Central field — Spring 2026 Seminar',
+    desc:'The core discipline examined across all five clusters this semester, spanning professional formation, sociotechnical systems, AI integration, student motivation, and global equity.',
+    conn:'' },
+
+  // ── TEAL — top-left ──────────────────────────────────────────────
+  { id:'prof-id',
+    lines:['Professional','Identity'],
+    grad:'gTeal', stroke:'#4ab8c8', r:36, hub:true,
+    px:200, py:190,
+    spk:'Dr. Stephanie Cutler (Wk 4)',
+    desc:'How values, passions, and lived experience shape who you become as an EER scholar. Careers in this field are non-linear, multidisciplinary, and deeply personal.',
+    conn:'Connects to Student Motivation (both examine intrinsic drivers) and Global Contexts (identity is culturally situated).' },
+  { id:'values',
+    lines:['Values-Driven','Career'],
+    grad:'gTeal', stroke:'#4ab8c8', r:26,
+    px:58, py:110,
+    spk:'Dr. Stephanie Cutler (Wk 4)',
+    desc:'Decision-making guided by joy, collaboration, creativity, and respect for uniqueness rather than prestige or convention. The "unicorn" metaphor captures each researcher\'s unique strengths as assets.',
+    conn:'Connects to Non-Academic Careers (validates diverse paths) and Professional Skills (values shape what skills matter).' },
+  { id:'faculty-dev',
+    lines:['Faculty','Development'],
+    grad:'gTeal', stroke:'#4ab8c8', r:26,
+    px:200, py:68,
+    spk:'Dr. Stephanie Cutler (Wk 4)',
+    desc:'Institutional structures like Penn State\'s Leonhard Center that support innovative teaching, instructional consultation, and assessment. Bridges the gap between EER knowledge and classroom practice.',
+    conn:'Connects to Research-to-Practice Translation (the mechanism) and Professional Formation (faculty need development too).' },
+  { id:'non-acad',
+    lines:['Non-Academic','Careers'],
+    grad:'gTeal', stroke:'#4ab8c8', r:24,
+    px:52, py:265,
+    spk:'EED Alumni Panel (Wk 5)',
+    desc:'EER doctorates work in industry, government, non-profits, teaching centers, and consulting, not just tenure-track positions. Challenges the assumption that academic careers are the default outcome.',
+    conn:'Connects to Professional Identity (reshapes what an EER career means) and Professional Skills (non-academic roles emphasize different competencies).' },
+  { id:'rpt',
+    lines:['Research-to-Practice','Translation'],
+    grad:'gTeal', stroke:'#4ab8c8', r:24,
+    px:220, py:340,
+    spk:'Dr. Stephanie Cutler (Wk 4)',
+    desc:'The bridge between academic EER findings and their application in engineering classrooms. Requires communicating research to diverse audiences including faculty, administrators, and students in accessible ways.',
+    conn:'Connects to Faculty Development (mechanism of translation) and Professional Skills (communication is a key competency).' },
+
+  // ── ROSE — top-center ─────────────────────────────────────────────
+  { id:'socio',
+    lines:['Sociotechnical','Thinking'],
+    grad:'gRose', stroke:'#d06080', r:36, hub:true,
+    px:700, py:170,
+    spk:'Dr. Desen Ozkan (Wk 8)',
+    desc:'Technical and social systems are mutually co-constructed. In EER, sociotechnical functions as a boundary object that travels across disciplines including STS, organizational studies, and engineering, and gets redefined as it moves.',
+    conn:'Connects to Wicked Problems (both frame engineering as inherently social) and Global Contexts (sociotechnical meanings vary geographically).' },
+  { id:'boundary',
+    lines:['Boundary','Objects'],
+    grad:'gRose', stroke:'#d06080', r:26,
+    px:520, py:68,
+    spk:'Dr. Desen Ozkan (Wk 8)',
+    desc:'Concepts like "sociotechnical" that exist at disciplinary intersections and take on different meanings in each context. Studying how they travel reveals power dynamics and disciplinary assumptions in EER.',
+    conn:'Connects to Global EER (concepts travel across national contexts) and Interdisciplinarity (boundary objects cross disciplines).' },
+  { id:'macroethics',
+    lines:['Engineering','Macroethics'],
+    grad:'gRose', stroke:'#d06080', r:26,
+    px:880, py:68,
+    spk:'Dr. Aaron Johnson (Wk 9)',
+    desc:'The societal implications of engineering decisions, going beyond individual codes of conduct to structural and systemic consequences. Examples include space debris, sustainable aviation, and urban air mobility.',
+    conn:'Connects to Wicked Problems (macroethics are inherently wicked) and Sociotechnical Thinking (social consequences of technical choices).' },
+  { id:'energy',
+    lines:['Energy &','Sustainability'],
+    grad:'gRose', stroke:'#d06080', r:24,
+    px:700, py:62,
+    spk:'Dr. Desen Ozkan (Wk 8)',
+    desc:'Offshore wind, energy transitions, and sustainability serve as rich cases for teaching sociotechnical thinking. They show how technical solutions are always embedded in political, economic, and social contexts.',
+    conn:'Connects to Sociotechnical Thinking (energy is the case study) and Wicked Problems (energy transition is a canonical wicked problem).' },
+
+  // ── VIOLET — top-right ────────────────────────────────────────────
+  { id:'genai',
+    lines:['Generative AI','in Education'],
+    grad:'gViolet', stroke:'#8870d0', r:36, hub:true,
+    px:1200, py:190,
+    spk:'Dr. David Reeping (Wk 11); OSU Panel (Wk 12)',
+    desc:'Students use GenAI in engineering courses mostly for copy-paste tasks rather than genuine collaboration. Research examines prompting strategies, cognitive offloading, and what GenAI means for design thinking and ideation.',
+    conn:'Connects to Student Motivation (AI changes which skills feel necessary) and Wicked Problems (regulating AI in education is itself wicked).' },
+  { id:'prompting',
+    lines:['Prompting','Strategies'],
+    grad:'gViolet', stroke:'#8870d0', r:26,
+    px:1340, py:100,
+    spk:'Dr. David Reeping (Wk 11)',
+    desc:'47% of students use single copy-paste prompting and only 13% use multi-question strategies. This reveals a gap between how AI tools could support learning as collaborators and how students actually use them as answer machines.',
+    conn:'Connects to Student Learning (prompting as metacognitive skill) and Professional Skills (effective AI use as an emerging competency).' },
+  { id:'inst-ai',
+    lines:['Institutional','AI Integration'],
+    grad:'gViolet', stroke:'#8870d0', r:26,
+    px:1200, py:72,
+    spk:'Arigye and Campbell, OSU (Wk 12)',
+    desc:'How universities like OSU are structurally responding to AI through policy, curriculum redesign, and support infrastructure. Institutional responses shape which students and faculty can benefit from AI tools.',
+    conn:'Connects to Equity and Access (who benefits from institutional AI?) and Professional Formation (institutional norms shape career readiness).' },
+  { id:'design-think',
+    lines:['Design Thinking','& Ideation'],
+    grad:'gViolet', stroke:'#8870d0', r:24,
+    px:1348, py:278,
+    spk:'Dr. David Reeping (Wk 11)',
+    desc:'AI is introduced as a brainstorming partner in engineering design courses. Research asks whether AI enhances divergent thinking or narrows students\' design space by anchoring them to AI outputs.',
+    conn:'Connects to Student Learning (design is a learning context) and Wicked Problems (design judgment is wicked-adjacent).' },
+
+  // ── GREEN-LEFT — Student Motivation — bottom-left ─────────────────
+  { id:'motivation',
+    lines:['Student','Motivation'],
+    grad:'gGreen', stroke:'#60c090', r:36, hub:true,
+    px:250, py:780,
+    spk:'Emily Buten (Wk 14)',
+    desc:'Why students do or do not invest in professional skill development. Students feel confident in their abilities but see professional skills as external to their "real engineer" identity, creating a motivation gap.',
+    conn:'Connects to Professional Identity (motivation tied to engineering self-concept) and AI (AI changes which skills feel necessary).' },
+  { id:'prof-skills',
+    lines:['Professional','Skills Dev.'],
+    grad:'gGreen', stroke:'#60c090', r:24,
+    px:90, py:900,
+    spk:'Emily Buten (Wk 14)',
+    desc:'Communication, teamwork, and leadership are demanded by industry but underdeveloped in engineering curricula. Students find them career-valuable but also identity-threatening, as developing them too much risks being seen as "not a real engineer."',
+    conn:'Connects to Non-Academic Careers (professional skills matter most there) and Engineering Identity (skills and identity are entangled).' },
+  { id:'sevt',
+    lines:['Expectancy-Value','Theory (SEVT)'],
+    grad:'gGreen', stroke:'#60c090', r:24,
+    px:268, py:930,
+    spk:'Emily Buten (Wk 14)',
+    desc:'Students show high expectancy (I can do this) but low attainment value (this is not what engineers do) for professional skills. The theory explains why motivation gaps persist even when students know the skills matter.',
+    conn:'Connects to Student Motivation (the theoretical foundation) and Research Methods (SEVT as an analytical lens in qualitative research).' },
+
+  // ── GREEN-RIGHT — Wicked Problems — bottom-right ──────────────────
+  { id:'wicked',
+    lines:['Wicked Problems','& Judgment'],
+    grad:'gGreen', stroke:'#60c090', r:36, hub:true,
+    px:1150, py:780,
+    spk:'Dr. Aaron Johnson (Wk 9); Wk 7 slides',
+    desc:'Problems with no definite formulation, no stopping rule, and no clean correct solution. Real engineering requires judgment: weighing production, safety, time, and leadership under uncertainty.',
+    conn:'Connects to Sociotechnical Thinking (wicked problems are sociotechnical by definition) and AI (can AI help or hurt judgment development?).' },
+  { id:'modeling',
+    lines:['Mathematical','Modeling Judgment'],
+    grad:'gGreen', stroke:'#60c090', r:24,
+    px:1130, py:940,
+    spk:'Dr. Aaron Johnson (Wk 9)',
+    desc:'Moving from decontextualized textbook problems to open-ended real-world modeling. The EMJ taxonomy captures how students make assumptions and justify choices when solving realistic problems.',
+    conn:'Connects to Wicked Problems (modeling is a wicked-adjacent practice) and Design Thinking (both require open-ended reasoning).' },
+  { id:'dbr',
+    lines:['Design-Based','Research (DBR)'],
+    grad:'gGreen', stroke:'#60c090', r:24,
+    px:1310, py:900,
+    spk:'Dr. Aaron Johnson (Wk 9)',
+    desc:'A methodology that simultaneously advances fundamental understanding and creates practical educational interventions. Research informs new course designs, and course pilots generate new research questions in return.',
+    conn:'Connects to Research Methods (DBR as methodology) and Research-Practice Translation (DBR is translation in action).' },
+
+  // ── ORANGE — bottom-center ────────────────────────────────────────
+  { id:'global',
+    lines:['Global EER','Contexts'],
+    grad:'gOrange', stroke:'#d08060', r:34, hub:true,
+    px:700, py:870,
+    spk:'Murzi, Seniuk Cicek, Direito (Wk 6)',
+    desc:'EER is not culturally neutral. What counts as good teaching, valid knowledge, or an "engineer" varies across national and cultural settings. EER must grapple with whose knowledge frameworks dominate and how to build genuinely global scholarship.',
+    conn:'Connects to Equity and Justice (global context = power and representation) and Sociotechnical Thinking (knowledge itself is sociotechnical).' },
+  { id:'equity',
+    lines:['Equity &','Justice'],
+    grad:'gOrange', stroke:'#d08060', r:24,
+    px:540, py:980,
+    spk:'Dr. Trina Fletcher (Wk 13)',
+    desc:'Who has access to engineering education and careers? Fletcher\'s work at UAPB, an HBCU, highlights how AI and data analytics intersect with race, class, and institutional resources. Equity is not an add-on to EER but a constitutive lens.',
+    conn:'Connects to AI Integration (who benefits from AI tools?) and Global Contexts (equity looks different across geographies).' },
+  { id:'interdiscipl',
+    lines:['Interdiscipli-','narity in EER'],
+    grad:'gOrange', stroke:'#d08060', r:24,
+    px:862, py:980,
+    spk:'Dr. Desen Ozkan (Wk 8)',
+    desc:'EER draws from education, sociology, psychology, STS, and engineering. Research programs form around what is "doable" given funding structures, institutional logics, and disciplinary norms.',
+    conn:'Connects to Boundary Objects (interdisciplinarity creates boundary objects) and Research Methods (qualitative methods often cross disciplinary lines).' },
+];
+
+// ─────────────────────────────────────────────────────────────────────
+// EDGE DATA
+// ─────────────────────────────────────────────────────────────────────
+const EDGES = [
+  // Spokes: EER center → cluster hubs (undirected, gold dashes)
+  {f:'eer', t:'prof-id',    lbl:'encompasses', style:'spoke', color:'rgba(201,168,76,0.22)', arr:'arr-gold'},
+  {f:'eer', t:'socio',      lbl:'encompasses', style:'spoke', color:'rgba(201,168,76,0.22)', arr:'arr-gold'},
+  {f:'eer', t:'genai',      lbl:'encompasses', style:'spoke', color:'rgba(201,168,76,0.22)', arr:'arr-gold'},
+  {f:'eer', t:'motivation', lbl:'encompasses', style:'spoke', color:'rgba(201,168,76,0.22)', arr:'arr-gold'},
+  {f:'eer', t:'wicked',     lbl:'encompasses', style:'spoke', color:'rgba(201,168,76,0.22)', arr:'arr-gold'},
+  {f:'eer', t:'global',     lbl:'encompasses', style:'spoke', color:'rgba(201,168,76,0.22)', arr:'arr-gold'},
+
+  // Teal intra
+  {f:'prof-id',     t:'values',      lbl:'expressed through', style:'intra', color:'rgba(74,184,200,0.5)',  arr:'arr-teal'},
+  {f:'prof-id',     t:'faculty-dev', lbl:'supported by',      style:'intra', color:'rgba(74,184,200,0.5)',  arr:'arr-teal'},
+  {f:'values',      t:'non-acad',    lbl:'opens',             style:'intra', color:'rgba(74,184,200,0.4)',  arr:'arr-teal'},
+  {f:'faculty-dev', t:'rpt',         lbl:'enables',           style:'intra', color:'rgba(74,184,200,0.4)',  arr:'arr-teal'},
+
+  // Rose intra
+  {f:'socio',       t:'boundary',    lbl:'operates as',  style:'intra', color:'rgba(208,96,128,0.5)',  arr:'arr-rose'},
+  {f:'socio',       t:'macroethics', lbl:'raises',       style:'intra', color:'rgba(208,96,128,0.5)',  arr:'arr-rose'},
+  {f:'socio',       t:'energy',      lbl:'applied in',   style:'intra', color:'rgba(208,96,128,0.42)', arr:'arr-rose'},
+  {f:'boundary',    t:'energy',      lbl:'applied in',   style:'intra', color:'rgba(208,96,128,0.35)', arr:'arr-rose'},
+  {f:'macroethics', t:'energy',      lbl:'evident in',   style:'intra', color:'rgba(208,96,128,0.35)', arr:'arr-rose'},
+
+  // Violet intra
+  {f:'genai',       t:'prompting',    lbl:'studied through', style:'intra', color:'rgba(136,112,208,0.5)',  arr:'arr-violet'},
+  {f:'genai',       t:'inst-ai',      lbl:'prompts',         style:'intra', color:'rgba(136,112,208,0.5)',  arr:'arr-violet'},
+  {f:'genai',       t:'design-think', lbl:'applied to',      style:'intra', color:'rgba(136,112,208,0.42)', arr:'arr-violet'},
+  {f:'prompting',   t:'design-think', lbl:'shapes',          style:'intra', color:'rgba(136,112,208,0.35)', arr:'arr-violet'},
+  {f:'inst-ai',     t:'design-think', lbl:'deployed in',     style:'intra', color:'rgba(136,112,208,0.35)', arr:'arr-violet'},
+
+  // Green intra
+  {f:'motivation',  t:'prof-skills',  lbl:'predicts',        style:'intra', color:'rgba(96,192,144,0.5)',  arr:'arr-green'},
+  {f:'motivation',  t:'sevt',         lbl:'explained by',    style:'intra', color:'rgba(96,192,144,0.5)',  arr:'arr-green'},
+  {f:'wicked',      t:'modeling',     lbl:'exemplified by',  style:'intra', color:'rgba(96,192,144,0.5)',  arr:'arr-green'},
+  {f:'wicked',      t:'dbr',          lbl:'studied via',     style:'intra', color:'rgba(96,192,144,0.5)',  arr:'arr-green'},
+
+  // Orange intra
+  {f:'global',      t:'equity',       lbl:'demands',         style:'intra', color:'rgba(208,128,96,0.5)',  arr:'arr-orange'},
+  {f:'global',      t:'interdiscipl', lbl:'involves',        style:'intra', color:'rgba(208,128,96,0.5)',  arr:'arr-orange'},
+
+  // Inter-cluster
+  {f:'socio',    t:'prof-id',    lbl:'shapes understanding of', style:'inter', color:'rgba(208,96,128,0.55)',  arr:'arr-inter'},
+  {f:'prof-id',  t:'motivation', lbl:'drives',                  style:'inter', color:'rgba(74,184,200,0.5)',   arr:'arr-inter'},
+  {f:'socio',    t:'wicked',     lbl:'frames',                  style:'inter', color:'rgba(208,96,128,0.5)',   arr:'arr-inter'},
+  {f:'genai',    t:'wicked',     lbl:'amplifies complexity of', style:'inter', color:'rgba(136,112,208,0.5)',  arr:'arr-inter'},
+  {f:'genai',    t:'motivation', lbl:'reframes',                style:'inter', color:'rgba(136,112,208,0.45)', arr:'arr-inter'},
+  {f:'wicked',   t:'motivation', lbl:'tests',                   style:'inter', color:'rgba(96,192,144,0.55)',  arr:'arr-inter'},
+  {f:'genai',    t:'prof-id',    lbl:'challenges',              style:'inter', color:'rgba(136,112,208,0.42)', arr:'arr-inter'},
+  {f:'global',   t:'socio',      lbl:'contextualizes',          style:'inter', color:'rgba(208,128,96,0.55)',  arr:'arr-inter'},
+  {f:'global',   t:'prof-id',    lbl:'broadens',                style:'inter', color:'rgba(208,128,96,0.48)',  arr:'arr-inter'},
+];
+
+// ─────────────────────────────────────────────────────────────────────
+// RENDER
+// The SVG uses a coordinate space that matches actual px sizes.
+// We set the viewBox dynamically to match the map-wrap dimensions.
+// ─────────────────────────────────────────────────────────────────────
+const wrap   = document.getElementById('map-wrap');
+const svg    = document.getElementById('cmap');
+const tip    = document.getElementById('tooltip');
+
+const VW = 1400, VH = 1080;
+svg.setAttribute('viewBox', `0 0 ${VW} ${VH}`);
+
+// Build node lookup by id
+const NX = {};
+NODES.forEach(n => NX[n.id] = n);
+
+// Cluster label positions
+const CLUSTER_LABELS = [
+  { text:'PROFESSIONAL IDENTITY & CAREER', x:200,  y:18,  color:'#4ab8c8' },
+  { text:'SOCIOTECHNICAL & ETHICS',         x:700,  y:18,  color:'#d06080' },
+  { text:'AI & EMERGING TECHNOLOGY',        x:1200, y:18,  color:'#8870d0' },
+  { text:'STUDENT LEARNING & MOTIVATION',   x:250,  y:1065, color:'#60c090' },
+  { text:'WICKED PROBLEMS & JUDGMENT',      x:1150, y:1065, color:'#60c090' },
+  { text:'GLOBAL & EQUITY CONTEXTS',        x:700,  y:1065, color:'#d08060' },
+];
+
+// ── Draw edges first (so nodes sit on top) ──
+function drawEdges() {
+  // Remove old edges
+  svg.querySelectorAll('line.edge, path.edge').forEach(el => el.remove());
+  wrap.querySelectorAll('.elabel').forEach(el => el.remove());
+
+  // SVG bounding rect for label positioning
+  const svgRect = svg.getBoundingClientRect();
+  const scaleX = svgRect.width  / VW;
+  const scaleY = svgRect.height / VH;
+
+  EDGES.forEach(e => {
+    const a = NX[e.f], b = NX[e.t];
+    if (!a || !b) return;
+
+    const dx = b.px - a.px, dy = b.py - a.py;
+    const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+    const x1 = a.px + dx/dist * (a.r + 2);
+    const y1 = a.py + dy/dist * (a.r + 2);
+    const x2 = b.px - dx/dist * (b.r + 9);
+    const y2 = b.py - dy/dist * (b.r + 9);
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('class','edge');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    line.setAttribute('stroke', e.color);
+    line.setAttribute('stroke-width', e.style === 'inter' ? '1.7' : '1.2');
+    if (e.style === 'spoke') line.setAttribute('stroke-dasharray','8,6');
+    if (e.style === 'intra') line.setAttribute('stroke-dasharray','4,4');
+    line.setAttribute('marker-end', `url(#${e.arr})`);
+    // Insert before first node group
+    const firstG = svg.querySelector('.node-g');
+    svg.insertBefore(line, firstG || null);
+
+    // HTML label — always horizontal, positioned using SVG-to-screen coords
+    const mx = (a.px + b.px) / 2;
+    const my = (a.py + b.py) / 2;
+    const lbl = document.createElement('div');
+    lbl.className = 'elabel';
+    lbl.textContent = e.lbl;
+    lbl.style.left = (mx * scaleX + svgRect.left - wrap.getBoundingClientRect().left) + 'px';
+    lbl.style.top  = (my * scaleY + svgRect.top  - wrap.getBoundingClientRect().top)  + 'px';
+    wrap.appendChild(lbl);
+  });
+}
+
+// ── Draw nodes ──
+function drawNodes() {
+  NODES.forEach(n => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','node-g');
+    g.setAttribute('transform',`translate(${n.px},${n.py})`);
+
+    // Pulse rings on center node
+    if (n.center) {
+      [0,1,2].forEach(i => {
+        const pr = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        pr.setAttribute('class','pulse-ring');
+        pr.setAttribute('cx','0'); pr.setAttribute('cy','0'); pr.setAttribute('r', n.r);
+        pr.style.animationDelay = `${i}s`;
+        g.appendChild(pr);
+      });
+    }
+
+    // Main circle
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('class','nc');
+    c.setAttribute('cx','0'); c.setAttribute('cy','0');
+    c.setAttribute('r', n.r);
+    c.setAttribute('fill', `url(#${n.grad})`);
+    c.setAttribute('stroke', n.stroke);
+    c.setAttribute('stroke-width', n.center ? '2.5' : n.hub ? '2' : '1.5');
+    if (!n.center && !n.hub) c.setAttribute('opacity','0.92');
+    g.appendChild(c);
+
+    // Text lines — vertically centered
+    const totalH = n.lines.length * 13;
+    n.lines.forEach((line, i) => {
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x','0');
+      t.setAttribute('y', -totalH/2 + i*13 + (n.center ? 15 : 13));
+      t.setAttribute('text-anchor','middle');
+      t.setAttribute('font-family', n.center ? "'Cinzel Decorative', serif" : "'Crimson Pro', serif");
+      t.setAttribute('font-size', n.center ? '11' : n.hub ? '11' : '9.5');
+      t.setAttribute('font-weight','600');
+      t.setAttribute('fill','#e8e0d0');
+      t.setAttribute('pointer-events','none');
+      t.textContent = line;
+      g.appendChild(t);
+    });
+
+    // Tooltip interaction
+    g.addEventListener('mouseenter', evt => {
+      document.getElementById('tt-title').textContent = n.lines.join(' ');
+      document.getElementById('tt-spk').textContent   = n.spk;
+      document.getElementById('tt-desc').textContent  = n.desc;
+      const connEl = document.getElementById('tt-conn');
+      if (n.conn) {
+        connEl.innerHTML = `<span>Connects to:</span> ${n.conn}`;
+        connEl.style.display = 'block';
+      } else {
+        connEl.style.display = 'none';
+      }
+      tip.classList.add('visible');
+      moveTip(evt);
+    });
+    g.addEventListener('mousemove', moveTip);
+    g.addEventListener('mouseleave', () => tip.classList.remove('visible'));
+
+    svg.appendChild(g);
+  });
+
+  // Cluster labels
+  CLUSTER_LABELS.forEach(cl => {
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', cl.x);
+    t.setAttribute('y', cl.y);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('font-family',"'Crimson Pro', serif");
+    t.setAttribute('font-size','9');
+    t.setAttribute('font-style','italic');
+    t.setAttribute('letter-spacing','0.07em');
+    t.setAttribute('fill', cl.color);
+    t.setAttribute('opacity','0.65');
+    t.setAttribute('pointer-events','none');
+    t.textContent = cl.text;
+    svg.appendChild(t);
+  });
+}
+
+function moveTip(e) {
+  const m=16, tw=tip.offsetWidth||320, th=tip.offsetHeight||180;
+  let x=e.clientX+m, y=e.clientY+m;
+  if(x+tw>innerWidth-m)  x=e.clientX-tw-m;
+  if(y+th>innerHeight-m) y=e.clientY-th-m;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+
+drawNodes();
+
+window.addEventListener('load',   () => setTimeout(drawEdges, 80));
+window.addEventListener('resize', () => setTimeout(drawEdges, 60));
+
+// ─────────────────────────────────────────────────────────────────────
+// STARFIELD
+// ─────────────────────────────────────────────────────────────────────
+const sc = document.getElementById('starfield');
+const sx = sc.getContext('2d');
+function rsz(){ sc.width=innerWidth; sc.height=innerHeight; }
+rsz(); window.addEventListener('resize', rsz);
+const STARS = Array.from({length:220}, ()=>({
+  x:Math.random(), y:Math.random(),
+  r:Math.random()*1.5+0.2,
+  ph:Math.random()*Math.PI*2,
+  sp:Math.random()*0.0022+0.0008
+}));
+(function frame(t){
+  sx.clearRect(0,0,sc.width,sc.height);
+  STARS.forEach(s=>{
+    const op = 0.25+0.55*Math.sin(s.ph+t*s.sp);
+    sx.beginPath();
+    sx.arc(s.x*sc.width, s.y*sc.height, s.r, 0, Math.PI*2);
+    sx.fillStyle=`rgba(200,220,255,${op})`;
+    sx.fill();
+  });
+  requestAnimationFrame(frame);
+})(0);
+</script>
+</body>
+</html>
